@@ -1,14 +1,13 @@
-
 use {
     crate::{
         accounts::Readonly,
         finance::Decimal,
-        oracle::{OracleKind, Validity, ZeroFeed, Pyth, Switchboard, UserFeed},
+        oracle::{OracleKind, Pyth, Switchboard, UserFeed, Validity, ZeroFeed},
         traits::Account,
         util::{require, Time},
-    }, solana_program::{clock::Clock, pubkey::Pubkey}
+    },
+    solana_program::{clock::Clock, pubkey::Pubkey},
 };
-
 
 #[cfg(feature = "wasm")]
 use {crate::util::b2pk, wasm_bindgen::prelude::*};
@@ -45,6 +44,7 @@ impl Oracle {
         &self,
         key: &Pubkey,
         data: &[u8],
+        owner: &Pubkey,
         time: Time,
     ) -> Result<(Decimal, Validity), &'static str> {
         if key != &self.key {
@@ -52,8 +52,8 @@ impl Oracle {
         }
         let (price, price_time) = match self.kind {
             OracleKind::ZeroFeed => ZeroFeed::query(time),
-            OracleKind::Pyth => Pyth::query(key, data),
-            OracleKind::Switchboard => Switchboard::query(data),
+            OracleKind::Pyth => Pyth::query(data, owner),
+            OracleKind::Switchboard => Switchboard::query(data, owner),
             OracleKind::UserFeed => UserFeed::query(data, time),
         }?;
         let validity = match time.secs_since(price_time) {
@@ -66,8 +66,9 @@ impl Oracle {
     pub fn query(&self, oracle_account: Readonly, clock: &Clock) -> Decimal {
         let key = oracle_account.get_info().key;
         let data = oracle_account.get_info().data.borrow();
+        let owner = oracle_account.get_info().owner;
         let time = Time::now(clock);
-        let (price, validity) = self.query_raw(key, &data, time).unwrap();
+        let (price, validity) = self.query_raw(key, &data, owner, time).unwrap();
         require(validity == Validity::Fresh, "Oracle price is stale");
         price
     }
@@ -100,12 +101,14 @@ impl Oracle {
         &self,
         oracleKey: &[u8],
         oracleData: &[u8],
+        oracleOwner: &[u8],
         unixTimestamp: f64,
     ) -> Result<f64, String> {
         let time = Time::from_unix_timestamp(unixTimestamp as u64);
         let oracle_key = b2pk(oracleKey)?;
+        let oracle_owner = b2pk(oracleOwner)?;
         let (price, validity) = self
-            .query_raw(&oracle_key, oracleData, time)
+            .query_raw(&oracle_key, oracleData, &oracle_owner, time)
             .map_err(|e| format!("Invalid collateral: {}", e))?;
         let price = price.to_f64();
         match validity {

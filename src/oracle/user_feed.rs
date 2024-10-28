@@ -1,8 +1,5 @@
 #[cfg(feature = "wasm")]
-use {
-    crate::util::b2pk,
-    wasm_bindgen::prelude::wasm_bindgen
-};
+use {crate::util::b2pk, wasm_bindgen::prelude::wasm_bindgen};
 use {
     crate::{
         accounts::Signer,
@@ -10,18 +7,10 @@ use {
         traits::{Account, Pod, Store, StoreAuth},
         util::Time,
     },
-    solana_program::pubkey::Pubkey
+    solana_program::pubkey::Pubkey,
 };
 
-/// A user-controlled oracle.
-///
-/// It's useful for:
-/// 1. Debugging: Developers can set custom prices for testing.
-/// 2. Initial implementation: For newly launched tokens or assets without established external price feeds.
-///    For example, when this program is first launched, DOVE will not have an external price feed.
-/// 3. Flexibility: Other account types can be deserialized as UserFeed,
-///    allowing easy extension of oracle functionality
-///    without modifying the core implementation.
+/// A user-controlled oracle, for testing and initial implementation.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
@@ -36,7 +25,10 @@ pub struct UserFeed {
 #[wasm_bindgen]
 impl UserFeed {
     pub fn derive_key(program_key: &[u8], user_key: &[u8], index: u8) -> Result<Vec<u8>, String> {
-        Ok(Self::derive_address_raw(&b2pk(&program_key)?, (&b2pk(&user_key)?, &[index])))
+        Ok(Self::derive_address_raw(
+            &b2pk(&program_key)?,
+            (&b2pk(&user_key)?, &[index]),
+        ))
     }
 }
 
