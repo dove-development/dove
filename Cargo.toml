@@ -1,0 +1,33 @@
+[package]
+name = "dove"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[dependencies]
+pyth-sdk-solana = { version = "=0.10.2", default-features = false }
+solana-program = { version = "=2.0.13", default-features = false }
+spl-associated-token-account = { version = "=5.0.1", default-features = false, features = [
+    "no-entrypoint",
+] }
+spl-token = { version = "=6.0.0", default-features = false, features = [
+    "no-entrypoint",
+] }
+switchboard-solana = { version = "=0.30.4", default-features = false }
+uint = { version = "=0.10.0", default-features = false }
+wasm-bindgen = { version = "=0.2.95", optional = true }
+serde-wasm-bindgen = { version = "=0.6.5", optional = true }
+
+[features]
+no-entrypoint = []
+wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
+default = []
