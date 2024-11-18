@@ -13,7 +13,7 @@ use {
         store::{Authority, Stability, World},
         traits::{Account, Command, Pod, Store},
     },
-    solana_program::{account_info::AccountInfo, pubkey::Pubkey},
+    solana_program::{account_info::AccountInfo, clock::Clock, pubkey::Pubkey, sysvar::Sysvar},
 };
 
 /// Sells DVD to the stability pool in exchange for stable tokens
@@ -60,13 +60,10 @@ impl StabilitySellDvd {
         let userKey = UserKey::new(b2pk(userKey)?);
         let dvdMintKey = DvdMintKey::new(b2pk(dvdMintKey)?);
         let stableMintKey = StableMintKey::new(b2pk(stableMintKey)?);
-        let accounts = Self::get_accounts(
-            programKey,
-            (userKey, dvdMintKey, stableMintKey),
-        )
-        .into_iter()
-        .map(AccountWasm::from)
-        .collect();
+        let accounts = Self::get_accounts(programKey, (userKey, dvdMintKey, stableMintKey))
+            .into_iter()
+            .map(AccountWasm::from)
+            .collect();
         Ok(accounts)
     }
 }
@@ -144,13 +141,17 @@ impl Command for StabilitySellDvd {
         let world = World::load_mut(program_id, world_account, &mut world_data[..], ());
 
         let mut stability_data = stability_account.get_info().data.borrow_mut();
-        let stability = Stability::load_mut(program_id, stability_account, &mut stability_data[..], ());
+        let stability =
+            Stability::load_mut(program_id, stability_account, &mut stability_data[..], ());
 
         let authority = Authority::from_account(program_id, authority_account);
 
+        let clock = Clock::get().unwrap();
         stability.sell_dvd(
             self.amount,
             &mut world.dvd,
+            &mut world.dvd_price,
+            &mut world.config.get_dvd_interest_rate(),
             &mut world.stable_dvd,
             program_id,
             authority,
@@ -160,6 +161,7 @@ impl Command for StabilitySellDvd {
             dvd_source_token_account,
             dvd_mint_account,
             token_program_account,
+            &clock,
         );
     }
 }

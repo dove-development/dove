@@ -1,5 +1,7 @@
+use crate::{finance::InterestRate, state::DvdPrice};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::wasm_bindgen;
+
 use {
     crate::{
         accounts::{Readonly, Signer, TokenAccount, TokenProgramAccount, Writable},
@@ -49,7 +51,6 @@ impl Reserve {
             token_program_account,
         );
         self.balance += amount;
-
     }
     pub fn withdraw(
         &mut self,
@@ -80,10 +81,12 @@ impl Reserve {
         &self,
         collateral: &Collateral,
         oracle_account: Readonly,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         clock: &Clock,
     ) -> Decimal {
         require(collateral.get_mint() == &self.mint, "mint mismatch");
-        collateral.get_price(oracle_account, clock) * self.balance
+        collateral.get_price(oracle_account, dvd_price, dvd_interest_rate, clock) * self.balance
     }
     pub const fn get_mint(&self) -> &Mint {
         &self.mint

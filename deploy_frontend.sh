@@ -6,6 +6,7 @@ fi
 rm pkg/.gitignore
 sed -i 's/flash_mint: FlashMint;//g' pkg/dove.d.ts
 sed -i 's/stable_dvd: StableDvd;//g' pkg/dove.d.ts
+sed -i 's/dvd_price: DvdPrice;//g' pkg/dove.d.ts
 
 rm -rf ../dove-frontend/pkg
 mv pkg ../dove-frontend

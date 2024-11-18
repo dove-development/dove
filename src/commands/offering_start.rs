@@ -87,6 +87,8 @@ impl Command for OfferingStart {
             &mut world.debt,
             &mut world.savings,
             &mut world.dvd,
+            &mut world.dvd_price,
+            &world.config.get_dvd_interest_rate(),
             &mut world.stable_dvd,
             world.config.get_dove_oracle(),
             world.config.get_offering_config(),

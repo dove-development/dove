@@ -3,20 +3,20 @@ use {crate::util::b2pk, wasm_bindgen::prelude::wasm_bindgen};
 use {
     crate::{
         accounts::{MintAccount, Readonly, Signer, TokenAccount, TokenProgramAccount, Writable},
-        finance::Decimal,
-        state::{SovereignAuth, StableDvd},
+        finance::{Decimal, InterestRate},
+        state::{DvdPrice, SovereignAuth, StableDvd},
         store::Authority,
         token::{Mint, Safe, Token},
         traits::{Account, Pod, Store, StoreAuth},
         util::{revert, Expect},
     },
-    solana_program::pubkey::Pubkey,
+    solana_program::{clock::Clock, pubkey::Pubkey},
 };
 
 /// A liquidity pool allowing 1:1 swapping between on-demand minted DVD and a
 /// blue-chip stablecoin. This helps to stabilize the market price of DVD.
 ///
-/// To protect against depegs, a `mint_limit` is set by governance: the maximum
+/// To protect against depegs, a `max_deposit` is set by governance: the maximum
 /// amount, in USD, that the protocol is willing to lose in the event of a depeg.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -27,8 +27,8 @@ pub struct Stability {
     safe_nonce: u8,
     mint_decimals: u8,
     stable_mint: Mint,
-    mint_limit: Decimal,
-    minted: Decimal,
+    max_deposit: Decimal,
+    deposited: Decimal,
 }
 
 pub struct StabilityParams {
@@ -70,10 +70,10 @@ impl Store for Stability {
             Expect::Any,
             Expect::Any,
             &mut self.mint_decimals,
-            &mut 0
+            &mut 0,
         );
-        self.mint_limit = Decimal::zero();
-        self.minted = Decimal::zero();
+        self.max_deposit = Decimal::zero();
+        self.deposited = Decimal::zero();
     }
     fn is_initialized(&self) -> bool {
         self.initialized
@@ -85,16 +85,18 @@ impl Store for Stability {
 
 // Authorized functions
 impl Stability {
-    pub fn update_mint_limit(&mut self, _: StoreAuth<Self>, mint_limit: Decimal) {
-        self.mint_limit = mint_limit;
+    pub fn update_max_deposit(&mut self, _: StoreAuth<Self>, mint_limit: Decimal) {
+        self.max_deposit = mint_limit;
     }
 }
 
 impl Stability {
     pub fn buy_dvd(
         &mut self,
-        amount: Decimal,
+        deposit_amount: Decimal,
         dvd: &mut Token,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         stable_dvd: &mut StableDvd,
         program_id: &Pubkey,
         authority: Authority,
@@ -104,38 +106,43 @@ impl Stability {
         dvd_token_account: TokenAccount<Writable>,
         dvd_mint_account: MintAccount<Writable>,
         token_program_account: TokenProgramAccount,
+        clock: &Clock,
     ) {
-        if amount.is_zero() {
+        if deposit_amount.is_zero() {
             return;
         }
-        let new_minted_amount = self.minted + amount;
-        if new_minted_amount > self.mint_limit {
+        let new_deposited = self.deposited + deposit_amount;
+        if new_deposited > self.max_deposit {
             revert("mint limit exceeded");
         }
 
+        let dvd_amount = deposit_amount / dvd_price.get(dvd_interest_rate, clock);
+
         let safe = Safe::get(program_id, safe_account, self.safe_nonce, &self.stable_mint);
         (safe).receive(
-            amount.to_token_amount(self.mint_decimals),
+            deposit_amount.to_token_amount(self.mint_decimals),
             user_account,
             stable_token_account,
             token_program_account,
         );
         dvd.mint(
-            amount,
+            dvd_amount,
             dvd_mint_account,
             dvd_token_account,
             authority,
             token_program_account,
         );
-        stable_dvd.increase(amount);
+        stable_dvd.increase(dvd_amount);
 
-        self.minted = new_minted_amount;
+        self.deposited = new_deposited;
     }
 
     pub fn sell_dvd(
         &mut self,
-        amount: Decimal,
+        dvd_amount: Decimal,
         dvd: &mut Token,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         stable_dvd: &mut StableDvd,
         program_id: &Pubkey,
         authority: Authority,
@@ -145,33 +152,35 @@ impl Stability {
         dvd_token_account: TokenAccount<Writable>,
         dvd_mint_account: MintAccount<Writable>,
         token_program_account: TokenProgramAccount,
+        clock: &Clock,
     ) {
-        if amount.is_zero() {
+        if dvd_amount.is_zero() {
             return;
         }
-        if amount > self.minted {
+        let deposit_amount = dvd_amount / dvd_price.get(dvd_interest_rate, clock);
+        if deposit_amount > self.deposited {
             revert("not enough stablecoin available to swap to");
         }
-        let new_minted_amount = self.minted - amount;
+        let new_deposited = self.deposited - deposit_amount;
 
         let safe = Safe::get(program_id, safe_account, self.safe_nonce, &self.stable_mint);
 
         (safe).send(
-            amount.to_token_amount(self.mint_decimals),
+            deposit_amount.to_token_amount(self.mint_decimals),
             stable_token_account,
             token_program_account,
             authority,
         );
         dvd.burn(
-            amount,
+            dvd_amount,
             dvd_mint_account,
             dvd_token_account,
             token_program_account,
             user_account,
         );
-        stable_dvd.decrease(amount);
-        
-        self.minted = new_minted_amount;
+        stable_dvd.decrease(dvd_amount);
+
+        self.deposited = new_deposited;
     }
 }
 
@@ -196,14 +205,14 @@ impl Stability {
             .map_err(|e| format!("Invalid stability: {}", e))
     }
 
-    #[wasm_bindgen(getter, js_name = minted)]
-    pub fn minted(&self) -> f64 {
-        self.minted.to_f64()
+    #[wasm_bindgen(getter, js_name = deposited)]
+    pub fn deposited(&self) -> f64 {
+        self.deposited.to_f64()
     }
 
-    #[wasm_bindgen(getter, js_name = mintLimit)]
-    pub fn mint_limit(&self) -> f64 {
-        self.mint_limit.to_f64()
+    #[wasm_bindgen(getter, js_name = maxDeposit)]
+    pub fn max_deposit(&self) -> f64 {
+        self.max_deposit.to_f64()
     }
 
     #[wasm_bindgen(getter, js_name = mintKey)]

@@ -18,7 +18,7 @@ pub const fn revert(reason: &'static str) -> ! {
 pub enum Expect<T> {
     Any,
     None,
-    Some(T)
+    Some(T),
 }
 
 #[cfg(feature = "wasm")]
@@ -45,6 +45,7 @@ pub use wasm::*;
 /// ```
 pub const SECS_PER_DAY: u64 = 60 * 60 * 24;
 
+#[cfg(feature = "wasm")]
 /// Number of seconds in a year
 /// ```math
 /// 60 * 60 * 24 * 365 = 31_536_000

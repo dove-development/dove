@@ -196,6 +196,8 @@ impl Command for VaultBorrow {
             &mut world.debt,
             &world.config.get_debt_config(),
             &mut world.dvd,
+            &mut world.dvd_price,
+            &world.config.get_dvd_interest_rate(),
             world.config.get_max_ltv(),
             authority,
             &collateral,

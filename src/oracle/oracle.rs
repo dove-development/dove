@@ -1,8 +1,9 @@
 use {
     crate::{
         accounts::Readonly,
-        finance::Decimal,
+        finance::{Decimal, InterestRate},
         oracle::{OracleKind, Pyth, Switchboard, UserFeed, Validity, ZeroFeed},
+        state::DvdPrice,
         traits::Account,
         util::{require, Time},
     },
@@ -40,7 +41,7 @@ impl Oracle {
         }
     }
 
-    pub fn query_raw(
+    fn query_usd_raw(
         &self,
         key: &Pubkey,
         data: &[u8],
@@ -63,14 +64,21 @@ impl Oracle {
         Ok((price, validity))
     }
 
-    pub fn query(&self, oracle_account: Readonly, clock: &Clock) -> Decimal {
+    /// Returns the price, in DVD, of the oracle's asset.
+    pub fn query_dvd(
+        &self,
+        oracle_account: Readonly,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
+        clock: &Clock,
+    ) -> Decimal {
         let key = oracle_account.get_info().key;
         let data = oracle_account.get_info().data.borrow();
         let owner = oracle_account.get_info().owner;
         let time = Time::now(clock);
-        let (price, validity) = self.query_raw(key, &data, owner, time).unwrap();
+        let (price, validity) = self.query_usd_raw(key, &data, owner, time).unwrap();
         require(validity == Validity::Fresh, "Oracle price is stale");
-        price
+        price / dvd_price.get(dvd_interest_rate, clock)
     }
 }
 
@@ -97,7 +105,7 @@ impl Oracle {
 
     #[wasm_bindgen(js_name = getPriceNegativeIfStale)]
     #[allow(non_snake_case)]
-    pub fn get_price_negative_if_stale(
+    pub fn get_price_usd_negative_if_stale(
         &self,
         oracleKey: &[u8],
         oracleData: &[u8],
@@ -108,7 +116,7 @@ impl Oracle {
         let oracle_key = b2pk(oracleKey)?;
         let oracle_owner = b2pk(oracleOwner)?;
         let (price, validity) = self
-            .query_raw(&oracle_key, oracleData, &oracle_owner, time)
+            .query_usd_raw(&oracle_key, oracleData, &oracle_owner, time)
             .map_err(|e| format!("Invalid collateral: {}", e))?;
         let price = price.to_f64();
         match validity {

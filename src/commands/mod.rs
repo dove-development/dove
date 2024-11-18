@@ -16,7 +16,7 @@ mod sovereign_update;
 mod stability_create;
 mod stability_buy_dvd;
 mod stability_sell_dvd;
-mod stability_update_mint_limit;
+mod stability_update_max_deposit;
 mod user_feed_create;
 mod user_feed_set_price;
 mod vault_borrow;
@@ -44,7 +44,7 @@ pub use {
     savings_deposit::SavingsDeposit, savings_withdraw::SavingsWithdraw,
     sovereign_update::SovereignUpdate, stability_create::StabilityCreate,
     stability_buy_dvd::StabilityBuyDvd, stability_sell_dvd::StabilitySellDvd,
-    stability_update_mint_limit::StabilityUpdateMintLimit, user_feed_create::UserFeedCreate,
+    stability_update_max_deposit::StabilityUpdateMaxDeposit, user_feed_create::UserFeedCreate,
     user_feed_set_price::UserFeedSetPrice, vault_borrow::VaultBorrow,
     vault_buy_collateral::VaultBuyCollateral, vault_claim_rewards::VaultClaimRewards,
     vault_create::VaultCreate, vault_create_reserve::VaultCreateReserve,

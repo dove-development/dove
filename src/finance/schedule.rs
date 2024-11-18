@@ -3,7 +3,7 @@ use crate::finance::Decimal;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::wasm_bindgen;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 #[repr(C)]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Schedule {
@@ -14,27 +14,29 @@ pub struct Schedule {
 
 impl Schedule {
     pub fn integrate(&self, t1: Decimal, t2: Decimal) -> Decimal {
-        if t1 >= t2 {
-            return Decimal::zero();
-        }
         let w = self.warmup_length;
         let l = self.total_length;
         let m = self.maximum;
-        let t1 = t1.min(l);
-        let t2 = t2.min(l);
-        if t2 <= w {
+
+        if t1 >= t2 || t1 >= l {
+            return Decimal::zero();
+        }
+
+        // clamp t2 to the total length
+        let t2 = if t2 > l { l } else { t2 };
+
+        if t1 >= w {
+            // rectangle, both t1 and t2 are in the post-warmup period
+            m * (t2 - t1)
+        } else if t2 <= w {
             // trapezoid, t1 and t2 are both in the warmup period
             let left = m * (t1 / w);
             let right = m * (t2 / w);
             let bottom = t2 - t1;
-            let area = ((left + right) / 2) * bottom;
-            return area;
-        } else if t1 >= w {
-            // rectangle, both t1 and t2 are in the post-warmup period
-            return m * (t2 - t1);
+            ((left + right) / 2) * bottom
         } else {
             // trapezoid + rectangle, t2 is in the post-warmup period and t1 is in the warmup period
-            return self.integrate(t1, w) + self.integrate(w, t2);
+            self.integrate(t1, w) + self.integrate(w, t2)
         }
     }
 }
@@ -69,12 +71,12 @@ impl Schedule {
         self.maximum.to_f64()
     }
 
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = warmupLength)]
     pub fn warmup_length(&self) -> f64 {
         self.warmup_length.to_f64()
     }
 
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = totalLength)]
     pub fn total_length(&self) -> f64 {
         self.total_length.to_f64()
     }
@@ -94,7 +96,7 @@ impl Schedule {
         }
     }
 
-    #[wasm_bindgen(getter)]
+    #[wasm_bindgen(getter, js_name = totalEmission)]
     pub fn total_emission(&self) -> f64 {
         self.integrate(Decimal::zero(), self.total_length).to_f64()
     }

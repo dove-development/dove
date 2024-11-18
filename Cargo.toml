@@ -26,8 +26,9 @@ uint = { version = "=0.10.0", default-features = false }
 wasm-bindgen = { version = "=0.2.95", optional = true }
 serde-wasm-bindgen = { version = "=0.6.5", optional = true }
 pyth-solana-receiver-sdk = { git = "https://github.com/pyth-network/pyth-crosschain", rev = "ecad0c3" }
+console_error_panic_hook = { version = "=0.1.7", optional = true }
 
 [features]
 no-entrypoint = []
-wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
+wasm = ["wasm-bindgen", "serde-wasm-bindgen", "console_error_panic_hook"]
 default = []

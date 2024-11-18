@@ -3,9 +3,9 @@ use {crate::util::b2pk, wasm_bindgen::prelude::wasm_bindgen};
 use {
     crate::{
         accounts::{MintAccount, Readonly, Signer, TokenAccount, TokenProgramAccount, Writable},
-        finance::Decimal,
+        finance::{Decimal, InterestRate},
         oracle::Oracle,
-        state::SovereignAuth,
+        state::{DvdPrice, SovereignAuth},
         store::Authority,
         token::{Mint, Safe},
         traits::{Account, Pod, Store, StoreAuth},
@@ -67,7 +67,7 @@ impl Store for Collateral {
             Expect::Any,
             Expect::Any,
             &mut self.mint_decimals,
-            &mut 0
+            &mut 0,
         );
         self.deposited = Decimal::zero();
         self.max_deposit = Decimal::zero();
@@ -152,8 +152,15 @@ impl Collateral {
         );
         self.deposited -= amount;
     }
-    pub fn get_price(&self, oracle_account: Readonly, clock: &Clock) -> Decimal {
-        self.oracle.query(oracle_account, clock)
+    pub fn get_price(
+        &self,
+        oracle_account: Readonly,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
+        clock: &Clock,
+    ) -> Decimal {
+        self.oracle
+            .query_dvd(oracle_account, dvd_price, dvd_interest_rate, clock)
     }
 }
 

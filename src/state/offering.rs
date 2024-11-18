@@ -1,8 +1,8 @@
 use crate::{
     accounts::{MintAccount, Readonly, Signer, TokenAccount, TokenProgramAccount, Writable},
-    finance::{Auction, AuctionConfig, Book, BookConfig, Decimal},
+    finance::{Auction, AuctionConfig, Book, BookConfig, Decimal, InterestRate},
     oracle::Oracle,
-    state::StableDvd,
+    state::{DvdPrice, StableDvd},
     store::Authority,
     token::Token,
     traits::Pod,
@@ -105,11 +105,16 @@ impl Offering {
     }
 
     #[wasm_bindgen(js_name = getPrice)]
+    #[allow(non_snake_case)]
     pub fn get_price(&self, config: &AuctionConfig, unixTimestamp: f64) -> f64 {
         let time = Time::from_unix_timestamp(unixTimestamp as u64);
         match self.state {
-            OfferingState::DvdOffering { auction, .. } => auction.calculate_price(config, time, 0).to_f64(),
-            OfferingState::DoveOffering { auction, .. } => auction.calculate_price(config, time, 0).to_f64(),
+            OfferingState::DvdOffering { auction, .. } => {
+                auction.calculate_price(config, time, 0).to_f64()
+            }
+            OfferingState::DoveOffering { auction, .. } => {
+                auction.calculate_price(config, time, 0).to_f64()
+            }
             OfferingState::Inactive => 0.0,
         }
     }
@@ -124,6 +129,7 @@ impl Offering {
     }
 
     #[wasm_bindgen(js_name = getSecsElapsed)]
+    #[allow(non_snake_case)]
     pub fn get_secs_elapsed(&self, unixTimestamp: f64) -> u64 {
         let time = Time::from_unix_timestamp(unixTimestamp as u64);
         match self.state {
@@ -136,8 +142,12 @@ impl Offering {
     #[wasm_bindgen(js_name = getFailPrice)]
     pub fn get_fail_price(&self, config: &AuctionConfig) -> f64 {
         match self.state {
-            OfferingState::DvdOffering { auction, .. } => auction.get_fail_price(config, 0).to_f64(),
-            OfferingState::DoveOffering { auction, .. } => auction.get_fail_price(config, 0).to_f64(),
+            OfferingState::DvdOffering { auction, .. } => {
+                auction.get_fail_price(config, 0).to_f64()
+            }
+            OfferingState::DoveOffering { auction, .. } => {
+                auction.get_fail_price(config, 0).to_f64()
+            }
             OfferingState::Inactive => 0.0,
         }
     }
@@ -146,7 +156,7 @@ impl Offering {
     pub fn is_dvd(&self) -> bool {
         match self.state {
             OfferingState::DvdOffering { .. } => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -165,6 +175,8 @@ impl Offering {
         debt: &mut Book,
         savings: &mut Book,
         dvd: &mut Token,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         stable_dvd: &mut StableDvd,
         dove_oracle: &Oracle,
         offering_config: &OfferingConfig,
@@ -175,7 +187,7 @@ impl Offering {
             OfferingState::Inactive => (),
             _ => revert("can't start new debt/equity offering until current is finished"),
         }
-        let dove_price = dove_oracle.query(oracle_account, clock);
+        let dove_price = dove_oracle.query_dvd(oracle_account, dvd_price, dvd_interest_rate, clock);
 
         let assets = debt.get_total(debt_config, clock) + stable_dvd.get_circulating();
         let liabilities = dvd.get_supply() + savings.get_total(savings_config, clock);

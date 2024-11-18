@@ -1,5 +1,6 @@
 use crate::{
-    finance::{AuctionConfig, Book, BookConfig},
+    finance::{AuctionConfig, Book, BookConfig, InterestRate},
+    state::DvdPrice,
     token::Token,
     util::{revert, Time},
 };
@@ -207,6 +208,25 @@ impl Vault {
         );
     }
 
+    /// Returns the total value of all collateral assets, in DVD.
+    fn get_collateral_value<'a, T>(
+        &self,
+        collateral: &[T],
+        oracle_accounts: &[Readonly],
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
+        clock: &Clock,
+    ) -> Decimal
+    where
+        T: std::ops::Deref<Target = Collateral>,
+    {
+        let mut sum = Decimal::zero();
+        for ((&r, c), &o) in self.reserves.iter().zip(collateral).zip(oracle_accounts) {
+            sum += r.get_value(c, o, dvd_price, dvd_interest_rate, clock);
+        }
+        sum
+    }
+
     pub fn withdraw(
         &mut self,
         auth: StoreAuth<Self>,
@@ -214,6 +234,8 @@ impl Vault {
 
         debt_book: &mut Book,
         debt_config: &BookConfig,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         max_ltv: Decimal,
 
         program_id: &Pubkey,
@@ -234,23 +256,23 @@ impl Vault {
         require(self.auction.is_none(), "Vault is liquidated");
         require(reserve_index < self.reserves.len(), "Invalid reserve index");
 
-        let collateral_value = {
-            let mut sum = Decimal::zero();
-            for ((&r, c), &o) in self
-                .reserves
-                .iter()
-                .zip(collateral.iter())
-                .zip(oracle_accounts)
-            {
-                sum += r.get_value(c, o, clock);
-            }
-            sum
-        };
+        let collateral_value = self.get_collateral_value(
+            &collateral,
+            oracle_accounts,
+            dvd_price,
+            dvd_interest_rate,
+            clock,
+        );
         let debt = self.debt.get_total(debt_book, debt_config, clock);
         let max_withdraw_value = collateral_value.saturating_sub(debt / max_ltv);
 
         let reserve_oracle = oracle_accounts[reserve_index];
-        let reserve_collateral_price = collateral[reserve_index].get_price(reserve_oracle, clock);
+        let reserve_collateral_price = collateral[reserve_index].get_price(
+            reserve_oracle,
+            dvd_price,
+            dvd_interest_rate,
+            clock,
+        );
         let max_withdraw_amount = max_withdraw_value / reserve_collateral_price;
 
         let reserve = &mut self.reserves[reserve_index];
@@ -278,6 +300,8 @@ impl Vault {
         debt_book: &mut Book,
         debt_config: &BookConfig,
         dvd: &mut Token,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
         max_ltv: Decimal,
         authority: Authority,
 
@@ -291,13 +315,13 @@ impl Vault {
         _ = auth;
         require(self.auction.is_none(), "Vault is liquidated");
 
-        let collateral_value = {
-            let mut sum = Decimal::zero();
-            for ((&r, &c), &o) in self.reserves.iter().zip(collateral).zip(oracle_accounts) {
-                sum += r.get_value(c, o, clock);
-            }
-            sum
-        };
+        let collateral_value = self.get_collateral_value(
+            collateral,
+            oracle_accounts,
+            dvd_price,
+            dvd_interest_rate,
+            clock,
+        );
 
         let borrow_limit = collateral_value * max_ltv;
         let debt = self.debt.get_total(debt_book, debt_config, clock);
@@ -381,6 +405,8 @@ impl Vault {
         debt_config: &BookConfig,
         vault_config: &VaultConfig,
         dvd: &mut Token,
+        dvd_price: &mut DvdPrice,
+        dvd_interest_rate: &InterestRate,
 
         collateral: &[&Collateral],
         oracle_accounts: &[Readonly],
@@ -393,13 +419,13 @@ impl Vault {
         clock: &Clock,
     ) {
         require(self.auction.is_none(), "Vault is already liquidated");
-        let collateral_value = {
-            let mut sum = Decimal::zero();
-            for ((&r, &c), &o) in self.reserves.iter().zip(collateral).zip(oracle_accounts) {
-                sum += r.get_value(c, o, clock);
-            }
-            sum
-        };
+        let collateral_value = self.get_collateral_value(
+            collateral,
+            oracle_accounts,
+            dvd_price,
+            dvd_interest_rate,
+            clock,
+        );
         let max_debt = collateral_value * max_ltv;
         let debt = self.debt.get_total(debt_book, debt_config, clock);
         if debt <= max_debt {
@@ -407,7 +433,7 @@ impl Vault {
         }
         let mut auction_market_prices = [Decimal::zero(); MAX_RESERVES];
         for (i, (&c, &o)) in collateral.iter().zip(oracle_accounts).enumerate() {
-            auction_market_prices[i] = c.get_price(o, clock);
+            auction_market_prices[i] = c.get_price(o, dvd_price, dvd_interest_rate, clock);
         }
         self.auction = Some(Auction::new(auction_market_prices, Time::now(clock)));
         let liquidation_penalty = debt * vault_config.liquidation_penalty_rate;
@@ -548,9 +574,9 @@ impl Vault {
 // External functions
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-#[allow(non_snake_case)]
 impl Vault {
     #[wasm_bindgen(js_name = deriveKey)]
+    #[allow(non_snake_case)]
     pub fn derive_key(programKey: &[u8], userKey: &[u8]) -> Result<Vec<u8>, String> {
         use crate::util::b2pk;
         Ok(Self::derive_address_raw(
@@ -587,6 +613,7 @@ impl Vault {
     }
 
     #[wasm_bindgen(js_name = calculateAuctionPrice)]
+    #[allow(non_snake_case)]
     pub fn calculate_auction_price(
         &self,
         index: usize,
@@ -605,6 +632,7 @@ impl Vault {
     }
 
     #[wasm_bindgen(js_name = getAuctionSecsElapsed)]
+    #[allow(non_snake_case)]
     pub fn get_auction_secs_elapsed(&self, unixTimestamp: f64) -> Option<f64> {
         self.auction.as_ref().map(|auction| {
             auction.get_secs_elapsed(Time::from_unix_timestamp(unixTimestamp as u64)) as f64
@@ -612,6 +640,7 @@ impl Vault {
     }
 
     #[wasm_bindgen(js_name = isAuctionOver)]
+    #[allow(non_snake_case)]
     pub fn is_auction_over(&self, unixTimestamp: f64, config: &AuctionConfig) -> Option<bool> {
         self.auction.as_ref().map(|auction| {
             auction.is_over(config, Time::from_unix_timestamp(unixTimestamp as u64))

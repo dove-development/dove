@@ -198,6 +198,8 @@ impl Command for VaultWithdraw {
             self.requested_amount,
             &mut world.debt,
             &world.config.get_debt_config(),
+            &mut world.dvd_price,
+            &world.config.get_dvd_interest_rate(),
             world.config.get_max_ltv(),
             program_id,
             program_token_account,

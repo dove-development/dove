@@ -1,7 +1,7 @@
 use {
     crate::{
-        finance::{Decimal, Schedule},
-        util::{revert, Time, SECS_PER_DAY, SECS_PER_YEAR},
+        finance::{Decimal, InterestRate, Schedule},
+        util::{revert, Time, SECS_PER_DAY},
     },
     solana_program::clock::Clock,
 };
@@ -14,25 +14,28 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[derive(Clone, Copy, Default)]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct BookConfig {
-    /// The continuously compounding interest rate.
-    /// Calculated as: ln(1 + APY)
-    /// For example, for a 5% APY: ln(1.05) = 0.04879
-    /// Just use e^rate - 1 to recover the APY.
-    interest_rate: Decimal,
+    interest_rate: InterestRate,
+    reward_schedule: Schedule,
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 impl BookConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(apy: f64) -> Self {
+    #[allow(non_snake_case)]
+    pub fn new(interestRate: InterestRate, rewardSchedule: Schedule) -> Self {
         Self {
-            interest_rate: Decimal::from((1.0 + apy).ln()),
+            interest_rate: interestRate,
+            reward_schedule: rewardSchedule,
         }
     }
-    #[wasm_bindgen(getter)]
-    pub fn apy(&self) -> f64 {
-        self.interest_rate.to_f64().exp() - 1.0
+    #[wasm_bindgen(getter, js_name = interestRate)]
+    pub fn interest_rate(&self) -> InterestRate {
+        self.interest_rate
+    }
+    #[wasm_bindgen(getter, js_name = rewardSchedule)]
+    pub fn reward_schedule(&self) -> Schedule {
+        self.reward_schedule
     }
 }
 
@@ -48,8 +51,6 @@ pub struct Book {
     multiplier: Decimal,
     // The reward accumulator, defined as the total rewards accrued on 1 DVD deposited at the protocol's inception.
     accumulator: Decimal,
-    // The schedule at which rewards are distributed.
-    reward_schedule: Schedule,
     // The time at which this Book was created.
     creation_time: Time,
     // The time at which this Book was last updated.
@@ -57,32 +58,35 @@ pub struct Book {
 }
 
 impl Book {
-    pub const fn new(clock: &Clock, reward_schedule: Schedule) -> Self {
+    pub const fn new(clock: &Clock) -> Self {
         let now = Time::now(clock);
         Self {
             total: Decimal::zero(),
             rewards: Decimal::zero(),
             multiplier: Decimal::one(),
             accumulator: Decimal::zero(),
-            reward_schedule,
             creation_time: now,
             last_update: now,
         }
     }
 
     fn project_total_and_multiplier(&self, config: &BookConfig, time: Time) -> (Decimal, Decimal) {
-        let secs = time.secs_since(self.last_update);
-        let interest_factor = (Decimal::one() + (config.interest_rate / SECS_PER_YEAR)).pow(secs);
+        let secs_elapsed = time.secs_since(self.last_update);
+        let interest_factor = config.interest_rate.get_accumulation_factor(secs_elapsed);
         let new_total = self.total * interest_factor;
         let new_multiplier = self.multiplier * interest_factor;
         (new_total, new_multiplier)
     }
 
-    fn project_rewards_and_accumulator(&self, time: Time) -> (Decimal, Decimal) {
+    fn project_rewards_and_accumulator(
+        &self,
+        config: &BookConfig,
+        time: Time,
+    ) -> (Decimal, Decimal) {
         let secs_since_last_update = time.secs_since(self.last_update);
         let secs_since_creation = time.secs_since(self.creation_time);
 
-        let new_rewards = self.reward_schedule.integrate(
+        let new_rewards = config.reward_schedule.integrate(
             Decimal::from(secs_since_creation - secs_since_last_update) / SECS_PER_DAY,
             Decimal::from(secs_since_creation) / SECS_PER_DAY,
         );
@@ -104,11 +108,14 @@ impl Book {
         if now.secs_since(self.last_update) == 0 {
             return;
         }
-        let (new_total, new_multiplier) = self.project_total_and_multiplier(config, now);
-        let (new_rewards, new_accumulator) = self.project_rewards_and_accumulator(now);
 
-        self.total = new_total;
-        self.multiplier = new_multiplier;
+        if !config.interest_rate.is_zero() {
+            let (new_total, new_multiplier) = self.project_total_and_multiplier(config, now);
+            self.total = new_total;
+            self.multiplier = new_multiplier;
+        }
+
+        let (new_rewards, new_accumulator) = self.project_rewards_and_accumulator(config, now);
         self.rewards = new_rewards;
         self.accumulator = new_accumulator;
         self.last_update = now;
@@ -127,15 +134,11 @@ impl Book {
     }
 
     #[wasm_bindgen(js_name = "projectRewards")]
-    pub fn project_rewards(&self, unixTimestamp: f64) -> f64 {
+    #[allow(non_snake_case)]
+    pub fn project_rewards(&self, config: &BookConfig, unixTimestamp: f64) -> f64 {
         let time = Time::from_unix_timestamp(unixTimestamp as u64);
-        let (rewards, _) = self.project_rewards_and_accumulator(time);
+        let (rewards, _) = self.project_rewards_and_accumulator(config, time);
         rewards.to_f64()
-    }
-
-    #[wasm_bindgen(getter, js_name = "rewardSchedule")]
-    pub fn reward_schedule(&self) -> Schedule {
-        self.reward_schedule
     }
 
     #[wasm_bindgen(getter, js_name = "creationTime")]
@@ -151,8 +154,8 @@ impl Book {
         new_multiplier
     }
 
-    pub(super) fn project_accumulator(&self, time: Time) -> Decimal {
-        let (_, new_accumulator) = self.project_rewards_and_accumulator(time);
+    pub(super) fn project_accumulator(&self, config: &BookConfig, time: Time) -> Decimal {
+        let (_, new_accumulator) = self.project_rewards_and_accumulator(config, time);
         new_accumulator
     }
 }

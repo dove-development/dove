@@ -197,6 +197,8 @@ impl Command for VaultLiquidate {
             &world.config.get_debt_config(),
             &world.config.get_vault_config(),
             &mut world.dvd,
+            &mut world.dvd_price,
+            &world.config.get_dvd_interest_rate(),
             &collateral,
             &oracle_accounts,
             dvd_mint_account,

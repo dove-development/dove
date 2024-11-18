@@ -113,6 +113,11 @@ impl Vesting {
         emission_due.to_f64()
     }
 
+    #[wasm_bindgen(getter, js_name = creationTime)]
+    pub fn creation_time(&self) -> f64 {
+        self.start_time.to_unix_timestamp() as f64
+    }
+
     #[wasm_bindgen(getter)]
     pub fn distributed(&self) -> f64 {
         let secs_since_creation = self.last_updated_time.secs_since(self.start_time);

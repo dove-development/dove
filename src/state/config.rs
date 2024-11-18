@@ -1,5 +1,5 @@
 use crate::{
-    finance::{AuctionConfig, BookConfig, Decimal},
+    finance::{AuctionConfig, BookConfig, Decimal, InterestRate},
     oracle::Oracle,
     state::{OfferingConfig, SovereignAuth},
     store::VaultConfig,
@@ -15,18 +15,23 @@ use super::flash_mint::FlashMintConfig;
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Config {
     max_ltv: Decimal,
+    dvd_interest_rate: InterestRate,
     dove_oracle: Oracle,
     auction_config: AuctionConfig,
     debt_config: BookConfig,
     flash_mint_config: FlashMintConfig,
     offering_config: OfferingConfig,
     savings_config: BookConfig,
-    vault_config: VaultConfig
+    vault_config: VaultConfig,
 }
 
 impl Config {
     pub const fn get_max_ltv(&self) -> Decimal {
         self.max_ltv
+    }
+
+    pub const fn get_dvd_interest_rate(&self) -> &InterestRate {
+        &self.dvd_interest_rate
     }
 
     pub const fn get_dove_oracle(&self) -> &Oracle {
@@ -68,6 +73,7 @@ impl Config {
     #[allow(non_snake_case)]
     pub fn new(
         maxLtv: f64,
+        dvdInterestRate: InterestRate,
         doveOracle: Oracle,
         auctionConfig: AuctionConfig,
         debtConfig: BookConfig,
@@ -81,6 +87,7 @@ impl Config {
         }
         Ok(Self {
             max_ltv: Decimal::from(maxLtv),
+            dvd_interest_rate: dvdInterestRate,
             dove_oracle: doveOracle,
             auction_config: auctionConfig,
             debt_config: debtConfig,
@@ -94,6 +101,11 @@ impl Config {
     #[wasm_bindgen(getter, js_name = "maxLtv")]
     pub fn max_ltv(&self) -> f64 {
         self.max_ltv.to_f64()
+    }
+
+    #[wasm_bindgen(getter, js_name = "dvdInterestRate")]
+    pub fn dvd_interest_rate(&self) -> InterestRate {
+        self.dvd_interest_rate
     }
 
     #[wasm_bindgen(getter, js_name = "doveOracle")]

@@ -2,7 +2,7 @@ use {
     crate::{
         accounts::{MintAccount, Readonly, Signer},
         finance::{Book, Schedule},
-        state::{Config, FlashMint, Offering, Sovereign, StableDvd, Vesting},
+        state::{Config, DvdPrice, FlashMint, Offering, Sovereign, StableDvd, Vesting},
         store::Authority,
         token::Token,
         traits::{Pod, Store},
@@ -15,7 +15,7 @@ use {
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// The struct containing all global state.
-/// 
+///
 /// **Safety**: Never overwrite the fields of this struct directly (/world\.(.+) = /).
 /// Doing so is unsafe and violates critical invariants.
 /// Always use the associated functions on the state objects to modify state.
@@ -32,6 +32,7 @@ pub struct World {
     pub savings: Book,
 
     pub stable_dvd: StableDvd,
+    pub dvd_price: DvdPrice,
 
     pub offering: Offering,
     pub flash_mint: FlashMint,
@@ -44,8 +45,6 @@ pub struct World {
 pub struct WorldParams {
     pub dove_mint_account: MintAccount<Readonly>,
     pub dvd_mint_account: MintAccount<Readonly>,
-    pub debt_schedule: Schedule,
-    pub savings_schedule: Schedule,
     pub sovereign_account: Signer,
     pub vesting_recipient: Pubkey,
     pub vesting_schedule: Schedule,
@@ -89,14 +88,19 @@ impl Store for World {
             Expect::None,
             Expect::None,
         );
-        self.debt = Book::new(&params.clock, params.debt_schedule);
-        self.savings = Book::new(&params.clock, params.savings_schedule);
+        self.debt = Book::new(&params.clock);
+        self.savings = Book::new(&params.clock);
         self.stable_dvd = StableDvd::new();
+        self.dvd_price = DvdPrice::new(&params.clock);
         self.config = Config::zero();
         self.sovereign = Sovereign::new(params.sovereign_account);
         self.offering = Offering::new();
         self.flash_mint = FlashMint::new();
-        self.vesting = Vesting::new(&params.clock, params.vesting_recipient, params.vesting_schedule);
+        self.vesting = Vesting::new(
+            &params.clock,
+            params.vesting_recipient,
+            params.vesting_schedule,
+        );
     }
     fn is_initialized(&self) -> bool {
         self.initialized
@@ -130,6 +134,11 @@ impl World {
     #[wasm_bindgen(js_name = zero)]
     pub fn zero_wasm() -> World {
         Self::zero()
+    }
+
+    #[wasm_bindgen(getter, js_name = dvdPrice)]
+    pub fn dvd_price_wasm(&self) -> DvdPrice {
+        self.dvd_price
     }
 
     #[wasm_bindgen(getter, js_name = stableDvd)]

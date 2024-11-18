@@ -115,10 +115,17 @@ impl Page {
     }
 
     #[wasm_bindgen(js_name = "projectRewards")]
-    pub fn project_rewards_wasm(&self, book: &Book, unixTimestamp: f64) -> f64 {
+    #[allow(non_snake_case)]
+    pub fn project_rewards_wasm(
+        &self,
+        book: &Book,
+        config: &BookConfig,
+        unixTimestamp: f64,
+    ) -> f64 {
         let time = Time::from_unix_timestamp(unixTimestamp as u64);
-        let accumulator = book.project_accumulator(time);
-        (self.rewards + ((self.total / self.multiplier) * (accumulator.saturating_sub(self.accumulator))))
-            .to_f64()
+        let accumulator = book.project_accumulator(config, time);
+        (self.rewards
+            + ((self.total / self.multiplier) * (accumulator.saturating_sub(self.accumulator))))
+        .to_f64()
     }
 }

@@ -903,6 +903,7 @@ dependencies = [
 name = "dove"
 version = "0.1.0"
 dependencies = [
+ "console_error_panic_hook",
  "pyth-solana-receiver-sdk",
  "serde-wasm-bindgen",
  "solana-program 2.0.13",

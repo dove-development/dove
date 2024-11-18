@@ -2,7 +2,7 @@ use {
     crate::{
         accounts::{Readonly, Signer, Writable},
         finance::Decimal,
-        keys::{StableMintKey, SovereignKey},
+        keys::{SovereignKey, StableMintKey},
         store::{Stability, World},
         traits::{Account, Command, Pod, Store},
     },
@@ -18,7 +18,7 @@ use {
     wasm_bindgen::prelude::wasm_bindgen,
 };
 
-/// Updates the mint limit for a stability pool
+/// Updates the maximum deposit for a stability pool
 ///
 /// Accounts expected:
 ///
@@ -28,18 +28,18 @@ use {
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
-pub struct StabilityUpdateMintLimit {
-    new_mint_limit: Decimal,
+pub struct StabilityUpdateMaxDeposit {
+    new_max_deposit: Decimal,
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-impl StabilityUpdateMintLimit {
+impl StabilityUpdateMaxDeposit {
     #[wasm_bindgen(js_name = "getData")]
     #[allow(non_snake_case)]
-    pub fn get_data_wasm(newMintLimit: f64) -> Vec<u8> {
+    pub fn get_data_wasm(newMaxDeposit: f64) -> Vec<u8> {
         Self {
-            new_mint_limit: Decimal::from(newMintLimit),
+            new_max_deposit: Decimal::from(newMaxDeposit),
         }
         .get_data()
     }
@@ -62,9 +62,9 @@ impl StabilityUpdateMintLimit {
     }
 }
 
-unsafe impl Pod for StabilityUpdateMintLimit {}
+unsafe impl Pod for StabilityUpdateMaxDeposit {}
 
-impl Command for StabilityUpdateMintLimit {
+impl Command for StabilityUpdateMaxDeposit {
     const ID: u32 = 0xd6c2c553;
     type Keys = (SovereignKey, StableMintKey);
 
@@ -107,6 +107,6 @@ impl Command for StabilityUpdateMintLimit {
             sovereign_auth,
         );
 
-        stability.update_mint_limit(stability_auth, self.new_mint_limit);
+        stability.update_max_deposit(stability_auth, self.new_max_deposit);
     }
 }

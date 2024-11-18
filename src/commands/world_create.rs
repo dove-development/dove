@@ -32,8 +32,6 @@ use {
 #[derive(Clone, Copy)]
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct WorldCreate {
-    debt_schedule: Schedule,
-    savings_schedule: Schedule,
     vesting_recipient: Pubkey,
     vesting_schedule: Schedule,
 }
@@ -43,15 +41,15 @@ impl WorldCreate {
     #[wasm_bindgen(js_name = "getData")]
     #[allow(non_snake_case)]
     pub fn get_data_wasm(
-        debtSchedule: Schedule,
-        savingsSchedule: Schedule,
         vestingRecipient: Vec<u8>,
         vestingSchedule: Schedule,
     ) -> Result<Vec<u8>, String> {
         Ok(Self {
-            debt_schedule: debtSchedule,
-            savings_schedule: savingsSchedule,
-            vesting_recipient: Pubkey::new_from_array(vestingRecipient.try_into().map_err(|_| "Invalid vesting recipient")?),
+            vesting_recipient: Pubkey::new_from_array(
+                vestingRecipient
+                    .try_into()
+                    .map_err(|_| "Invalid vesting recipient")?,
+            ),
             vesting_schedule: vestingSchedule,
         }
         .get_data())
@@ -146,8 +144,6 @@ impl Command for WorldCreate {
                 dvd_mint_account,
                 authority,
                 clock,
-                debt_schedule: self.debt_schedule,
-                savings_schedule: self.savings_schedule,
                 vesting_recipient: self.vesting_recipient,
                 vesting_schedule: self.vesting_schedule,
             },
